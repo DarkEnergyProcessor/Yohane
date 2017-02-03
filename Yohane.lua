@@ -78,7 +78,7 @@ end
 ---------------------------
 
 --! @brief Initialize Yohane Flash Abstraction
---! @param loaderfunc Function which behaves like loadfile
+--! @param loaderfunc Function which behaves like `loadfile` (defaults to `loadfile`)
 --! @param sysroot Where does the library file is located? (forward slash,
 --!        without trailing slash)
 --! @note Calling this if it's already initialized is no-op

@@ -33,12 +33,44 @@ local function readstring(stream)
 	return stream:read(len):sub(1, lensub)
 end
 
+local function copy_table(table, except)
+	local new_table = {}
+	
+	for a, b in pairs(table) do
+		if a ~= except then
+			new_table[a] = b
+		end
+	end
+	
+	return new_table
+end
+
 -------------------------
 -- Yohane Flash Reader --
 -------------------------
+--[[
+-- API Function List
+-- Assume "YohaneFlash" is the Yohane object containing all flash data
+
+YohaneFlash = Yohane.newFlashFromStream(stream, movie_name|nil)
+YohaneFlash = Yohane.newFlashFromString(string, movie_name|nil)
+YohaneFlash = Yohane.newFlashFromFilename(filename, movie_name|nil)
+YohaneFlash = YohaneFlash:clone()
+YohaneFlash:update(deltaT in milliseconds)
+YohaneFlash:draw(x, y)
+YohaneFlash:setMovie(movie_name)
+YohaneFlash:unFreeze()
+YohaneFlash:jumpToLabel(label_name)
+
+previous_fps = YohaneFlash:setFPS(fps|nil)
+PlatformImage = YohaneFlash:getImage(image_name)
+movie_frozen = YohaneFlash:isFrozen()
+]]--
+
 -- Creates Yohane Flash Abstraction from specificed stream
 function YohaneFlash._internal.parseStream(stream)
 	local flsh = {
+		timeModulate = 0,
 		strings = {},
 		matrixTransf = {},
 		movieData = {},
@@ -122,10 +154,8 @@ function YohaneFlash._internal.parseStream(stream)
 			movie.startInstruction = moviedata[3]
 			movie.endInstruction = moviedata[4]
 			movie.instructionData = flsh.instrData
-			movie.instructionCounter = movie.data
 			movie.frameCount = moviedata[2]
-			
-			flsh.movieData[i - 1] = movie
+			movie.data = Yohane.Movie.newMovie(movie)
 		elseif moviedata[2] == 0xFFFF then
 			-- Image
 			movie.type = "image"
@@ -133,34 +163,84 @@ function YohaneFlash._internal.parseStream(stream)
 			movie.offsetX = math.floor(moviedata[3] / 32768) * (-65536) + moviedata[3]	-- To signed
 			movie.offsetY = math.floor(moviedata[4] / 32768) * (-65536) + moviedata[4]	-- To signed
 			movie.imageHandle = Yohane.Platform.ResolveImage(movie.name:sub(2, -6))
-			flsh.movieData[i - 1] = movie
+			
 		elseif moviedata[2] == 0x8FFF then
 			-- Shape
 			movie.type = "shape"
 			-- No support for shape atm
 			
-			flsh.movieData[i - 1] = movie
+		else
+			movie.type = "unknown"
 		end
+		
+		flsh.movieData[i - 1] = movie
 	end
 	
 	return setmetatable({}, flsh)
 end
 
 -- Clones current Yohane instance to new one.
--- Beware that this might increase your memory usage
--- if not used correctly!
 function YohaneFlash._internal._mt.clone(this)
+	this = getmetatable(this)
+	
+	local flsh = {
+		timeModulate = 0,
+		currentMovie = this.currentMovie,
+		strings = copy_table(this.strings),
+		matrixTransf = {},
+		movieData = {},
+		instrData = copy_table(this.instrData)
+		__index = YohaneFlash._internal._mt
+	}
+	
+	-- Copy matrix transform data
+	for i = 0, #this.matrixTransf do	-- 0-index based. Index 0 is not counted on len operation
+		flsh.matrixTransf[i] = copy_table(this.matrixTransf[i])
+	end
+	
+	-- Copy movie data
+	for i = 0, #this.movieData do
+		if this.movieData[i].type == "flash" then
+			flsh.movieData[i] = copy_table(this.movieData[i], "data")
+			flsh.movieData[i].data = Yohane.Movie.newMovie(flsh.movieData[i], flsh.movieData)
+		elseif flsh.movieData[i].type == "image" then
+			flsh.movieData[i] = copy_table(this.movieData[i], "imageHandle")
+			flsh.movieData[i].imageHandle = Yohane.Platform.CloneImage(this.movieData[i].imageHandle)
+		else
+			flsh.movieData[i] = copy_table(this.movieData[i])
+		end
+	end
 end
 
--- Get Yohane flash movie object from specificed name
--- or from specificed ID
--- This function can be slow since it always creates new
--- instance of Yohane flash movie object
-function YohaneFlash._internal._mt.getMovie(this, id)
-end
-
--- Get image object from specificed name or ID
+-- Get image object from specificed name
 -- The image objecr returned is platform-dependant, example
 -- for LOVE2D platform, it will be LOVE2D Image object.
-function YohaneFlash._internal._mt.getImage(this, id)
+function YohaneFlash._internal._mt.getImage(this, name)
+	this = getmetatable(this)
+	
+	for i = 0, #this.movieData do
+		local x = this.movieData[i]
+		
+		if x.type == "image" then
+			return x.imageHandle
+		end
+	end
+	
+	return nil
 end
+
+-- Update flash
+function YohaneFlash._internal._mt.update(this, deltaT)
+	this = getmetatable(this)
+	assert(this.currentMovie, "No movie render is set")
+	
+	if this.movieFrozen then return end
+	
+	this.timeModulate = this.timeModulate + deltaT
+	
+	if this.timeModulate >= this.msPerFrame then
+		this.timeModulate = this.timeModulate - this.msPerFrame
+		this.movieFrozen = this.currentMovie:stepFrame()
+	end
+end
+
