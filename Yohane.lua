@@ -87,16 +87,62 @@ function Yohane.Init(loaderfunc, sysroot)
 	
 	loaderfunc = loaderfunc or loadfile
 	
-	Yohane.Flash = loaderfunc(sysroot.."YohaneFlash.lua")(Yohane)
-	Yohane.Movie = loaderfunc(sysroot.."YohaneMovie.lua")(Yohane)
+	Yohane.Flash = assert(loaderfunc(sysroot.."/YohaneFlash.lua"))(Yohane)
+	Yohane.Movie = assert(loaderfunc(sysroot.."/YohaneMovie.lua"))(Yohane)
 	isInitialized = true
 end
 
---! @brief Converts string to read-only memory stream
+--! @brief Converts string to read-only memory stream. Used internally
 --! @param str String to convert to memory stream
 --! @returns new memorystream object
 function Yohane.MakeMemoryStream(str)
 	return memreadstream.new(str)
+end
+
+function Yohane.newFlashFromStream(stream, movie_name)
+	local yf = Yohane.Flash._internal.parseStream(stream)
+	
+	if movie_name then
+		yf:setMovie(movie_name)
+	end
+	
+	return yf
+end
+
+function Yohane.newFlashFromString(str, movie_name)
+	local yf = Yohane.Flash._internal.parseStream(memreadstream.new(str))
+	
+	if movie_name then
+		yf:setMovie(movie_name)
+	end
+	
+	return yf
+end
+
+function Yohane.newFlashFromFilename(fn, movie_name)
+	-- By default use io.open
+	local f = assert((Yohane.Platform.OpenReadFile or io.open)(fn, "rb"))
+	local yf = Yohane.Flash._internal.parseStream(f)
+	
+	if movie_name then
+		yf:setMovie(movie_name)
+	end
+	
+	f:close()
+	return yf
+end
+
+-- Used internally
+function Yohane.CopyTable(table, except)
+	local new_table = {}
+	
+	for a, b in pairs(table) do
+		if a ~= except then
+			new_table[a] = b
+		end
+	end
+	
+	return new_table
 end
 
 return Yohane

@@ -9,40 +9,35 @@ local YohaneFlash = {_internal = {_mt = {}}}
 -- Basic conversion, copied from Shelsha --
 -------------------------------------------
 local function string2dwordu(a)
-	local str = a:read(4)
+	local str = assert(a:read(4))
 	
+	--[[
 	return bit.bor(
 		bit.lshift(str:byte(), 24),
 		bit.lshift(str:sub(2,2):byte(), 16),
 		bit.lshift(str:sub(3,3):byte(), 8),
 		str:sub(4,4):byte()
 	) % 4294967296
+	]]
+	return str:byte() * 16777216 + str:sub(2, 2):byte() * 65535 + str:sub(3, 3):byte() * 256 + str:sub(4, 4):byte()
 end
 
 local function string2wordu(a)
-	local str = a:read(2)
+	local str = assert(a:read(2))
 	
-	return bit.bor(bit.lshift(str:byte(), 8), str:sub(2,2):byte())
+	--return bit.bor(bit.lshift(str:byte(), 8), str:sub(2,2):byte())
+	return str:byte() * 256 + str:sub(2, 2):byte()
 end
 
 
 local function readstring(stream)
 	local len = string2wordu(stream)
+	--[[
 	local lensub = (len % 2) == 0 and -3 or -2
 	
 	return stream:read(len):sub(1, lensub)
-end
-
-local function copy_table(table, except)
-	local new_table = {}
-	
-	for a, b in pairs(table) do
-		if a ~= except then
-			new_table[a] = b
-		end
-	end
-	
-	return new_table
+	]]
+	return ({stream:read(len):gsub("%z", "")})[1]
 end
 
 -------------------------
@@ -87,6 +82,7 @@ function YohaneFlash._internal.parseStream(stream)
 	local stringsCount = string2wordu(stream)
 	assert(stringsCount ~= 65535, "Sound extension is not supported at the moment")
 	
+	string2wordu(stream)	-- Skip total string size
 	-- Read strings data
 	for i = 1, stringsCount do
 		flsh.strings[i - 1] = readstring(stream)
@@ -98,7 +94,9 @@ function YohaneFlash._internal.parseStream(stream)
 	
 	-- Read float constants
 	for i = 1, floatsCount do
-		floats[i - 1] = string2dwordu(stream) / 65536
+		local x = string2dwordu(stream) / 65536
+		
+		floats[i - 1] = math.floor(x / 32768) * (-65536) + x	-- To signed
 	end
 	
 	-- Read matrix data
@@ -109,26 +107,26 @@ function YohaneFlash._internal.parseStream(stream)
 		
 		if mtrxType == 0 then
 			-- MATRIX_ID, Identity
-			matrixData = {0, 0, 0, 0, 0, 0}
+			matrixData = {Type = 0, 1, 0, 0, 1, 0, 0}
 		elseif mtrxType == 1 then
 			-- MATRIX_T, Translate
-			matrixData = {1, 0, 0, 1, floats[mtrxIdx], floats[mtrxIdx + 1]}
+			matrixData = {Type = 1, 1, 0, 0, 1, floats[mtrxIdx], floats[mtrxIdx + 1]}
 		elseif mtrxType == 2 then
 			-- MATRIX_TS, Translation and Scale
-			matrixData = {floats[mtrxIdx], 0, 0, floats[mtrxIdx + 1], floats[mtrxIdx + 2], floats[mtrxIdx + 3]}
+			matrixData = {Type = 2, floats[mtrxIdx], 0, 0, floats[mtrxIdx + 1], floats[mtrxIdx + 2], floats[mtrxIdx + 3]}
 		elseif mtrxType == 3 then
 			-- MATRIX_TG, Translation, Skew, and Scale
-			matrixData = {
+			matrixData = {Type = 3,
 				floats[mtrxIdx]    , floats[mtrxIdx + 1], floats[mtrxIdx + 2],
 				floats[mtrxIdx + 3], floats[mtrxIdx + 4], floats[mtrxIdx + 5]
 			}
 		elseif mtrxType == 4 then
-			-- MATRIX_COL, RGBA color component, from 0.0 to 1.0, so convert to 0-255
-			matrixData = {
-				floats[mtrxIdx]     * 255,
-				floats[mtrxIdx + 1] * 255,
-				floats[mtrxIdx + 2] * 255,
-				floats[mtrxIdx + 3] * 255
+			-- MATRIX_COL, RGBA color component, from 0.0 to 1.0
+			matrixData = {Type = 4,
+				floats[mtrxIdx],
+				floats[mtrxIdx + 1],
+				floats[mtrxIdx + 2],
+				floats[mtrxIdx + 3],
 			}
 		end
 		
@@ -142,7 +140,7 @@ function YohaneFlash._internal.parseStream(stream)
 	end
 	
 	-- Read movie data
-	local movieCount = string2dwordu(stream)
+	local movieCount = string2wordu(stream)
 	for i = 1, movieCount do
 		local moviedata = {string2dwordu(stream), string2dwordu(stream), string2dwordu(stream), string2dwordu(stream)}
 		local movie = {}
@@ -155,7 +153,7 @@ function YohaneFlash._internal.parseStream(stream)
 			movie.endInstruction = moviedata[4]
 			movie.instructionData = flsh.instrData
 			movie.frameCount = moviedata[2]
-			movie.data = Yohane.Movie.newMovie(movie)
+			movie.data = Yohane.Movie.newMovie(movie, flsh)
 		elseif moviedata[2] == 0xFFFF then
 			-- Image
 			movie.type = "image"
@@ -186,28 +184,28 @@ function YohaneFlash._internal._mt.clone(this)
 	local flsh = {
 		timeModulate = 0,
 		currentMovie = this.currentMovie,
-		strings = copy_table(this.strings),
+		strings = Yohane.CopyTable(this.strings),
 		matrixTransf = {},
 		movieData = {},
-		instrData = copy_table(this.instrData)
+		instrData = Yohane.CopyTable(this.instrData),
 		__index = YohaneFlash._internal._mt
 	}
 	
 	-- Copy matrix transform data
 	for i = 0, #this.matrixTransf do	-- 0-index based. Index 0 is not counted on len operation
-		flsh.matrixTransf[i] = copy_table(this.matrixTransf[i])
+		flsh.matrixTransf[i] = Yohane.CopyTable(this.matrixTransf[i])
 	end
 	
 	-- Copy movie data
 	for i = 0, #this.movieData do
 		if this.movieData[i].type == "flash" then
-			flsh.movieData[i] = copy_table(this.movieData[i], "data")
-			flsh.movieData[i].data = Yohane.Movie.newMovie(flsh.movieData[i], flsh.movieData)
+			flsh.movieData[i] = Yohane.CopyTable(this.movieData[i], "data")
+			flsh.movieData[i].data = Yohane.Movie.newMovie(flsh.movieData[i], flsh)
 		elseif flsh.movieData[i].type == "image" then
-			flsh.movieData[i] = copy_table(this.movieData[i], "imageHandle")
+			flsh.movieData[i] = Yohane.CopyTable(this.movieData[i], "imageHandle")
 			flsh.movieData[i].imageHandle = Yohane.Platform.CloneImage(this.movieData[i].imageHandle)
 		else
-			flsh.movieData[i] = copy_table(this.movieData[i])
+			flsh.movieData[i] = Yohane.CopyTable(this.movieData[i])
 		end
 	end
 end
@@ -221,7 +219,7 @@ function YohaneFlash._internal._mt.getImage(this, name)
 	for i = 0, #this.movieData do
 		local x = this.movieData[i]
 		
-		if x.type == "image" then
+		if x.type == "image" and x.name and x.name:sub(2) == name then
 			return x.imageHandle
 		end
 	end
@@ -244,3 +242,24 @@ function YohaneFlash._internal._mt.update(this, deltaT)
 	end
 end
 
+-- Draw
+function YohaneFlash._internal._mt.draw(this, x, y)
+	this = getmetatable(this)
+	assert(this.currentMovie, "No movie render is set")
+	
+	this.currentMovie:draw(x or 0, y or 0)
+end
+
+function YohaneFlash._internal._mt.setMovie(this, movie_name)
+	this = getmetatable(this)
+	
+	for i = 0, #this.movieData do
+		local x = this.movieData[i]
+		
+		if x.type == "flash" and x.name and x.name:sub(2) == movie_name then
+			this.currentMovie = x.data
+		end
+	end
+end
+
+return YohaneFlash

@@ -3,15 +3,15 @@
 
 --[[
 -- To initialize Yohane under LOVE2D, example
-local Yohane = require("Yohane")	-- Load Yohane FLSH abstraction layer
-require("YohaneLove2DPlatform")		-- Set platform-specific functions
-Yohane.Init(love.filesystem.load)	-- Initialize Yohane
+local Yohane = require("Yohane")						-- Load Yohane FLSH abstraction layer
+love.filesystem.load("YohaneLove2DPlatform", sysroot)	-- Set platform-specific functions
+Yohane.Init(love.filesystem.load)						-- Initialize Yohane
 
 -- love.filesystem.load is used because loadfile operates
 -- on directory where LOVE2D started, which breaks everything.
 ]]--
 
-local Yohane = require("Yohane")
+local Yohane = require(({...})[1]:gsub("/", ".")..".Yohane")
 local love = require("love")
 
 -- Simply set the function. ResolveImage always uses PNG
@@ -32,14 +32,21 @@ function Yohane.Platform.Draw(drawdatalist)
 	
 	local r, g, b, a = love.graphics.getColor()
 	
-	for _, drawdata in ipairs(drawdatalist)
+	for _, drawdata in ipairs(drawdatalist) do
 		love.graphics.setColor(drawdata.r, drawdata.g, drawdata.b, drawdata.a)
 		love.graphics.draw(
-			drawdata.image, drawdata.x, drawdata.y, 0,
-			drawdata.scaleX, drawdata.scaleY, 0, 0,
-			drawdata.skewX, drawdata.skewY
+			drawdata.image, drawdata.x, drawdata.y,
+			drawdata.rotation,
+			drawdata.scaleX, drawdata.scaleY
 		)
 	end
 	
 	love.graphics.setColor(r, g, b, a)
+end
+
+function Yohane.Platform.OpenReadFile(fn)
+	local x = assert(love.filesystem.newFile(fn, "r"))
+	x:seek(0)
+	
+	return x
 end

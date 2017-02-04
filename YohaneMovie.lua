@@ -5,13 +5,21 @@
 local Yohane = ({...})[1]
 local YohaneMovie = {_internal = {_mt = {}}}
 
+local DefaultMatrix = {scaleX = 1, scaleY = 1, rotation = 0, translateX = 0, translateY = 0}
+local DefaultColor = {r = 1, g = 1, b = 1, a = 1}
+
+-- math.sign function
+local function math_sign(x)
+	return x > 0 and 1 or (x < 0 and -1 or 0)
+end
+
 ------------------------------
 -- Yohane Movie Calculation --
 ------------------------------
 --[[
 -- API List
 
-YohaneMovie = YohaneMovie.newMoie(moviedatatable, parentmovielist)
+YohaneMovie = YohaneMovie.newMoie(moviedatatable, parentflash)
 instruction_data = YohaneMovie:getNextInstruction()
 instruction = YohaneMovie:findFrame(frame)
 is_stopped = YohaneMovie:stepFrame()
@@ -20,15 +28,15 @@ YohaneMovie:jumpLabel(label_name)
 
 ]]--
 
-function YohaneMovie.newMovie(moviedata, movielist)
+function YohaneMovie.newMovie(moviedata, parentflash)
 	local mvdata = {
-		instruction = moviedata.startInstruction + 4
+		instruction = moviedata.startInstruction + 4,
 		currentFrame = 1,
 		layers = {},
 		drawCalls = {},
-		movieList = movielist,
+		parent = parentflash,
 		data = moviedata,	-- Beware, recursive table
-		__index = YohaneMoie._internal._mt
+		__index = YohaneMovie._internal._mt
 	}
 	
 	return setmetatable({}, mvdata)
@@ -60,18 +68,18 @@ function YohaneMovie._internal._mt.findFrame(this, frame)
 			local inst = instTab[i]
 			
 			if inst == 0 then		-- SHOW_FRAME
-				i = i + 3
+				i = i + 4
 				uiFrame = uiFrame + 1
 				
 				if uiFrame == frame then
-					return i - 4
+					return i
 				end
 			elseif inst == 1 then	-- PLACE_OBJECT
-				i = i + 4
-			elseif inst == 2 or inst == 3 then -- REMOVE_OBJECT or PLAY_SOUND
-				i = i + 1
-			elseif inst == 4 then	-- PLACE_OBJECT_CLIP
 				i = i + 5
+			elseif inst == 2 or inst == 3 then -- REMOVE_OBJECT or PLAY_SOUND
+				i = i + 2
+			elseif inst == 4 then	-- PLACE_OBJECT_CLIP
+				i = i + 6
 			else
 				assert(false, "Invalid instruction")
 			end
@@ -84,7 +92,8 @@ end
 -- Heavy calculation starts here :v
 function YohaneMovie._internal._mt:stepFrame()
 	local this = getmetatable(self)
-	local frozen = false
+	
+	if this.frozen then return end
 	
 	-- Clear draw calls here
 	for i = #this.drawCalls, 1, -1 do
@@ -98,21 +107,77 @@ function YohaneMovie._internal._mt:stepFrame()
 			-- SHOW_FRAME
 			local label = self:getNextInstruction()
 			local frame_type = self:getNextInstruction()
-			local frame_target = self:getNextInstruction()
+			local frame_target = self:getNextInstruction() + 1
 			
 			if frame_type == 0 then
 				-- STOP_INSTRUCTION
-				frozen = true
+				this.frozen = true
 			elseif frame_type == 1 then
 				-- GOTO_AND_PLAY
 				this.instruction = self:findFrame(frame_target)
 			elseif frame_type == 2 then
 				-- GOTO_AND_STOP
 				this.instruction = self:findFrame(frame_target)
-				frozen = true
+				this.frozen = true
+			elseif this.instruction >= this.data.endInstruction then
+				-- Loop it
+				this.instruction = this.data.startInstruction + 4
 			end
 			
-			-- TODO: calculate and put all draw calls here
+			local updatedMovies = {}
+			for n, v in pairs(this.layers) do
+				local movieObj = assert(this.parent.movieData[v.movieID], "Unknown movie was specificed")
+				
+				if movieObj.type == "flash" then
+					if not(updatedMovies[movieObj]) then
+						-- Frame step it if it's not already
+						movieObj.data:stepFrame()
+						updatedMovies[movieObj] = true
+					end
+					
+					-- Then get it's draw calls
+					local movieObjMovie = getmetatable(movieObj.data)
+					for a = 1, #movieObjMovie.drawCalls do
+						local b = movieObjMovie.drawCalls[a]
+						local dc = {image = b.image}
+						
+						-- Translate is done at first
+						dc.x = b.x * v.matrix.scaleX + v.matrix.translateX
+						dc.y = b.y * v.matrix.scaleY + v.matrix.translateY
+						
+						-- Scale and rotation
+						dc.rotation = b.rotation + v.matrix.rotation
+						dc.scaleX = b.scaleX * v.matrix.scaleX
+						dc.scaleY = b.scaleY * v.matrix.scaleY
+						
+						-- Color blending
+						-- Drawcall color is bg, layer color is fg
+						dc.r = (v.color.r * v.color.a + b.r * b.a * (1 - v.color.a)) / (v.color.a + b.a * (1 - v.color.a))
+						dc.g = (v.color.g * v.color.a + b.g * b.a * (1 - v.color.a)) / (v.color.a + b.a * (1 - v.color.a))
+						dc.b = (v.color.b * v.color.a + b.b * b.a * (1 - v.color.a)) / (v.color.a + b.a * (1 - v.color.a))
+						dc.a = v.color.a * b.a * (1 - v.color.a)
+						
+						this.drawCalls[#this.drawCalls + 1] = dc
+					end
+				elseif movieObj.type == "image" then
+					-- Simple image. It has offsets
+					local dc = {image = movieObj.imageHandle}
+					
+					dc.x = movieObj.offsetX + v.matrix.translateX
+					dc.y = movieObj.offsetY + v.matrix.translateY
+					
+					dc.rotation = v.matrix.rotation
+					dc.scaleX = v.matrix.scaleX
+					dc.scaleY = v.matrix.scaleY
+					
+					dc.r = v.color.r
+					dc.g = v.color.g
+					dc.b = v.color.b
+					dc.a = v.color.a
+					
+					this.drawCalls[#this.drawCalls + 1] = dc
+				end
+			end
 		elseif instr == 1 or instr == 4 then
 			-- PLACE_OBJECT or PLACE_OBJECT_CLIP
 			local movieID = self:getNextInstruction()
@@ -121,10 +186,73 @@ function YohaneMovie._internal._mt:stepFrame()
 			local layer = self:getNextInstruction()
 			
 			if instr == 4 then
-				self:getNextInstruction()	-- Clip layer
+				self:getNextInstruction()	-- Clip layer (unused)
 			end
 			
-			-- TODO: calculate layers in here
+			-- Get layer matrix and such
+			if not(this.layers[layer]) then
+				this.layers[layer] = {
+					matrix = Yohane.CopyTable(DefaultMatrix),
+					color = Yohane.CopyTable(DefaultColor)
+				}
+			end
+			
+			local layerdata = this.layers[layer]
+			
+			if movieID == 65535 then
+				assert(layerdata.movieID, "MovieID 65535 used without initialized")
+			else
+				layerdata.movieID = movieID
+			end
+			
+			if matrixIdx ~= 65535 then
+				-- Set matrix data
+				local tm = assert(this.parent.matrixTransf[matrixIdx], "Invalid matrix")
+				
+				if tm.Type == 0 then
+					-- MATRIX_ID
+					layerdata.matrix = Yohane.CopyTable(DefaultMatrix)
+				elseif tm.Type == 1 then
+					-- MATRIX_T
+					layerdata.matrix.translateX = tm[5]
+					layerdata.matrix.translateY = tm[6]
+				elseif tm.Type == 2 then
+					-- MATRIX_TS
+					layerdata.matrix.scaleX = tm[1]
+					layerdata.matrix.scaley = tm[4]
+					layerdata.matrix.rotation = 0
+					layerdata.matrix.translateX = tm[5]
+					layerdata.matrix.translateY = tm[6]
+				elseif tm.Type == 3 then
+					-- MATRIX_TG
+					layerdata.matrix.scaleX = math_sign(tm[1]) * math.sqrt(tm[1] * tm[1] + tm[3] * tm[3])
+					layerdata.matrix.scaley = math_sign(tm[4]) * math.sqrt(tm[2] * tm[2] + tm[4] * tm[4])
+					layerdata.matrix.rotation = math.atan2(-tm[2], tm[1])
+					layerdata.matrix.translateX = tm[5]
+					layerdata.matrix.translateY = tm[6]
+				elseif tm.Type == 4 then
+					assert(false, "MATRIX_COL specificed for Matrix Index")
+				end
+			end
+			
+			if matrixColIdx ~= 65535 then
+				-- MATRIX_COL
+				local tc = assert(this.parent.matrixTransf[matrixColIdx], "Invalid matrix")
+				
+				if tc.Type == 0 then
+					layerdata.color.r = 1
+					layerdata.color.g = 1
+					layerdata.color.b = 1
+					layerdata.color.a = 1
+				elseif tc.Type == 4 then
+					layerdata.color.r = tc[1]
+					layerdata.color.g = tc[2]
+					layerdata.color.b = tc[3]
+					layerdata.color.a = tc[4]
+				else
+					assert(false, "Matrix specificed for color is not MATRIX_COL type")
+				end
+			end
 		elseif instr == 2 then
 			-- REMOVE_OBJECT
 			this.layers[self:getNextInstruction()] = nil
@@ -139,3 +267,29 @@ function YohaneMovie._internal._mt:stepFrame()
 	
 	return frozen
 end
+
+function YohaneMovie._internal._mt.draw(this, x, y)
+	local newdc = {}
+	this = getmetatable(this)
+	
+	for i = 1, #this.drawCalls do
+		local z = Yohane.CopyTable(this.drawCalls[i])
+		
+		z.x = z.x + x
+		z.y = z.y + y
+		z.r = z.r * 255
+		z.g = z.g * 255
+		z.b = z.b * 255
+		z.a = z.a * 255
+		
+		newdc[i] = z
+	end
+	
+	Yohane.Platform.Draw(newdc)
+end
+
+function YohaneMovie._internal._mt.jumpLabel(this, label)
+	
+end
+
+return YohaneMovie
