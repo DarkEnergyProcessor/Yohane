@@ -17,10 +17,52 @@ local love = require("love")
 -- Simply set the function. ResolveImage always uses PNG
 Yohane.Platform.ResolveImage = love.graphics.newImage
 
+-- For audio, additional steps must be done
+function Yohane.Platform.ResolveAudio(path)
+	print(path)
+	-- The path doesn't have any extension, so we need to provide our own
+	local _, x = pcall(love.audio.newSource, path..".wav")
+	
+	if _ then
+		return x
+	end
+	
+	_, x = pcall(love.audio.newSource, path..".mp3")
+	
+	if _ then
+		return x
+	end
+	
+	_, x = pcall(love.audio.newSource, path..".ogg")
+	
+	if _ then
+		return x
+	end
+	
+	return nil
+end
+
 function Yohane.Platform.CloneImage(image_handle)
 	-- No cloning needed
 	-- You can use same image handle for multiple draws
 	return image_handle
+end
+
+function Yohane.Platform.CloneAudio(audio)
+	-- It's possible that the audio is nil
+	if audio then
+		return audio:clone()
+	end
+	
+	return nil
+end
+
+function Yohane.Platform.PlayAudio(audio)
+	-- It's possible that the audio is nil
+	if audio then
+		audio:stop()
+		audio:play()
+	end
 end
 
 function Yohane.Platform.Draw(drawdatalist)
@@ -33,6 +75,7 @@ function Yohane.Platform.Draw(drawdatalist)
 	local r, g, b, a = love.graphics.getColor()
 	
 	for _, drawdata in ipairs(drawdatalist) do
+		--print(drawdata.x, drawdata.y)
 		love.graphics.setColor(drawdata.r, drawdata.g, drawdata.b, drawdata.a)
 		love.graphics.draw(
 			drawdata.image, drawdata.x, drawdata.y,

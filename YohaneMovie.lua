@@ -163,8 +163,9 @@ function YohaneMovie._internal._mt:stepFrame()
 					-- Simple image. It has offsets
 					local dc = {image = movieObj.imageHandle}
 					
-					dc.x = movieObj.offsetX + v.matrix.translateX
-					dc.y = movieObj.offsetY + v.matrix.translateY
+					--print(movieObj.offsetX)
+					dc.x = movieObj.offsetX * v.matrix.scaleX + v.matrix.translateX
+					dc.y = movieObj.offsetY * v.matrix.scaleY + v.matrix.translateY
 					
 					dc.rotation = v.matrix.rotation
 					dc.scaleX = v.matrix.scaleX
@@ -219,15 +220,15 @@ function YohaneMovie._internal._mt:stepFrame()
 				elseif tm.Type == 2 then
 					-- MATRIX_TS
 					layerdata.matrix.scaleX = tm[1]
-					layerdata.matrix.scaley = tm[4]
+					layerdata.matrix.scaleY = tm[4]
 					layerdata.matrix.rotation = 0
 					layerdata.matrix.translateX = tm[5]
 					layerdata.matrix.translateY = tm[6]
 				elseif tm.Type == 3 then
 					-- MATRIX_TG
 					layerdata.matrix.scaleX = math_sign(tm[1]) * math.sqrt(tm[1] * tm[1] + tm[3] * tm[3])
-					layerdata.matrix.scaley = math_sign(tm[4]) * math.sqrt(tm[2] * tm[2] + tm[4] * tm[4])
-					layerdata.matrix.rotation = math.atan2(-tm[2], tm[1])
+					layerdata.matrix.scaleY = math_sign(tm[4]) * math.sqrt(tm[2] * tm[2] + tm[4] * tm[4])
+					layerdata.matrix.rotation = math.acos(tm[1] / layerdata.matrix.scaleX)
 					layerdata.matrix.translateX = tm[5]
 					layerdata.matrix.translateY = tm[6]
 				elseif tm.Type == 4 then
@@ -258,14 +259,18 @@ function YohaneMovie._internal._mt:stepFrame()
 			this.layers[self:getNextInstruction()] = nil
 		elseif instr == 3 then
 			-- PLAY_SOUND
-			-- unimplemented
-			self:getNextInstruction()
+			local soundID = self:getNextInstruction() + 1
+			local sound = assert(this.parent.audios[soundID], "Invalid sound ID")
+			
+			if sound.handle then
+				Yohane.Platform.PlayAudio(sound.handle)
+			end
 		else
 			assert(false, "Invalid instruction")
 		end
 	until instr == 0
 	
-	return frozen
+	return this.frozen
 end
 
 function YohaneMovie._internal._mt.draw(this, x, y)
@@ -289,7 +294,41 @@ function YohaneMovie._internal._mt.draw(this, x, y)
 end
 
 function YohaneMovie._internal._mt.jumpLabel(this, label)
+	local instTab
+	local strTab
 	
+	this = getmetatable(this)
+	instTab = this.data.instructionData
+	strTab = this.parent.strings
+	
+	this.frozen = false
+	
+	do
+		local i = this.data.startInstruction
+		
+		while i < this.data.endInstruction do
+			local inst = instTab[i]
+			
+			if inst == 0 then		-- SHOW_FRAME
+				local lbl = instTab[i + 1]
+				i = i + 4
+				
+				if lbl ~= 65535 and strTab[lbl] == label then
+					return i
+				end
+			elseif inst == 1 then	-- PLACE_OBJECT
+				i = i + 5
+			elseif inst == 2 or inst == 3 then -- REMOVE_OBJECT or PLAY_SOUND
+				i = i + 2
+			elseif inst == 4 then	-- PLACE_OBJECT_CLIP
+				i = i + 6
+			else
+				assert(false, "Invalid instruction")
+			end
+		end
+	end
+	
+	return this.data.startInstruction + 4
 end
 
 return YohaneMovie

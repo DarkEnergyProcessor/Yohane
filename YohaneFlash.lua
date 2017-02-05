@@ -11,21 +11,12 @@ local YohaneFlash = {_internal = {_mt = {}}}
 local function string2dwordu(a)
 	local str = assert(a:read(4))
 	
-	--[[
-	return bit.bor(
-		bit.lshift(str:byte(), 24),
-		bit.lshift(str:sub(2,2):byte(), 16),
-		bit.lshift(str:sub(3,3):byte(), 8),
-		str:sub(4,4):byte()
-	) % 4294967296
-	]]
-	return str:byte() * 16777216 + str:sub(2, 2):byte() * 65535 + str:sub(3, 3):byte() * 256 + str:sub(4, 4):byte()
+	return str:byte() * 16777216 + str:sub(2, 2):byte() * 65536 + str:sub(3, 3):byte() * 256 + str:sub(4, 4):byte()
 end
 
 local function string2wordu(a)
 	local str = assert(a:read(2))
 	
-	--return bit.bor(bit.lshift(str:byte(), 8), str:sub(2,2):byte())
 	return str:byte() * 256 + str:sub(2, 2):byte()
 end
 
@@ -67,6 +58,7 @@ function YohaneFlash._internal.parseStream(stream)
 	local flsh = {
 		timeModulate = 0,
 		strings = {},
+		audios = {},
 		matrixTransf = {},
 		movieData = {},
 		instrData = {},
@@ -80,9 +72,48 @@ function YohaneFlash._internal.parseStream(stream)
 	flsh.msPerFrame = string2wordu(stream)
 	
 	local stringsCount = string2wordu(stream)
-	assert(stringsCount ~= 65535, "Sound extension is not supported at the moment")
+	stream:read(2)	-- Skip total string size
 	
-	string2wordu(stream)	-- Skip total string size
+	if stringsCount == 65535 then
+		-- Sound extension
+		local soundCount = string2wordu(stream)
+		
+		if soundCount > 0 then
+			for i = 1, soundCount do
+				flsh.audios[i] = {nameIdx = string2wordu(stream)}
+			end
+		end
+		
+		local indexTotal = string2dwordu(stream)
+		local shapeCount = string2wordu(stream)
+		
+		for i = 1, shapeCount do
+			-- Ignore shape atm
+			local shapeStyle
+			
+			stream:read(2)
+			shapeStyle = string2wordu(stream)
+			
+			for j = 1, shapeStyle do
+				local idx = string2dwordu(stream)
+				local endidx = string2wordu(stream) - idx
+				
+				-- Ignore data
+				stream:read(endidx * 2 + 10)
+				
+				local styleType = stream:read(1):byte()
+				
+				if styleType == 1 then
+					stream:read(4)
+				elseif styleType == 2 or styleType == 3 then
+					stream:read(256)
+				end
+			end
+		end
+		
+		stringsCount = string2wordu(stream)
+	end
+	
 	-- Read strings data
 	for i = 1, stringsCount do
 		flsh.strings[i - 1] = readstring(stream)
@@ -158,20 +189,27 @@ function YohaneFlash._internal.parseStream(stream)
 			-- Image
 			movie.type = "image"
 			movie.name = flsh.strings[moviedata[1]]
-			movie.offsetX = math.floor(moviedata[3] / 32768) * (-65536) + moviedata[3]	-- To signed
-			movie.offsetY = math.floor(moviedata[4] / 32768) * (-65536) + moviedata[4]	-- To signed
+			movie.offsetX = math.floor(moviedata[3] / 2147483648) * (-4294967296) + moviedata[3]	-- To signed
+			movie.offsetY = math.floor(moviedata[4] / 2147483648) * (-4294967296) + moviedata[4]	-- To signed
 			movie.imageHandle = Yohane.Platform.ResolveImage(movie.name:sub(2, -6))
-			
 		elseif moviedata[2] == 0x8FFF then
 			-- Shape
 			movie.type = "shape"
 			-- No support for shape atm
-			
 		else
 			movie.type = "unknown"
 		end
 		
 		flsh.movieData[i - 1] = movie
+	end
+	
+	-- Resolve audios
+	for i = 1, #flsh.audios do
+		local h = flsh.audios[i]
+		
+		if flsh.strings[h.nameIdx] then
+			h.handle = Yohane.Platform.ResolveAudio(flsh.strings[h.nameIdx]:sub(9))
+		end
 	end
 	
 	return setmetatable({}, flsh)
@@ -183,8 +221,10 @@ function YohaneFlash._internal._mt.clone(this)
 	
 	local flsh = {
 		timeModulate = 0,
+		msPerFrame = this.msPerFrame,
 		currentMovie = this.currentMovie,
 		strings = Yohane.CopyTable(this.strings),
+		audios = {},
 		matrixTransf = {},
 		movieData = {},
 		instrData = Yohane.CopyTable(this.instrData),
@@ -201,13 +241,23 @@ function YohaneFlash._internal._mt.clone(this)
 		if this.movieData[i].type == "flash" then
 			flsh.movieData[i] = Yohane.CopyTable(this.movieData[i], "data")
 			flsh.movieData[i].data = Yohane.Movie.newMovie(flsh.movieData[i], flsh)
-		elseif flsh.movieData[i].type == "image" then
+		elseif this.movieData[i].type == "image" then
 			flsh.movieData[i] = Yohane.CopyTable(this.movieData[i], "imageHandle")
 			flsh.movieData[i].imageHandle = Yohane.Platform.CloneImage(this.movieData[i].imageHandle)
 		else
 			flsh.movieData[i] = Yohane.CopyTable(this.movieData[i])
 		end
 	end
+	
+	-- Copy audio
+	for i = 1, #this.audios do
+		flsh.audios[i - 1] = {
+			nameIdx = this.audios[i - 1].nameIdx,
+			handle = Yohane.Platform.CloneAudio(this.audios[i - 1].handle)
+		}
+	end
+	
+	return setmetatable({}, flsh)
 end
 
 -- Get image object from specificed name
@@ -258,8 +308,23 @@ function YohaneFlash._internal._mt.setMovie(this, movie_name)
 		
 		if x.type == "flash" and x.name and x.name:sub(2) == movie_name then
 			this.currentMovie = x.data
+			
+			return true
 		end
 	end
+	
+	return false
+end
+
+function YohaneFlash._internal._mt:jumpToLabel(label_name)
+	local this = getmetatable(self)
+	assert(this.currentMovie, "No movie render is set")
+	
+	if this.movieFrozen then
+		this.movieFrozen = false
+	end
+	
+	getmetatable(this.currentMovie).instruction = this.currentMovie:jumpLabel(label_name)
 end
 
 return YohaneFlash
