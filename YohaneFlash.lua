@@ -327,4 +327,11 @@ function YohaneFlash._internal._mt:jumpToLabel(label_name)
 	getmetatable(this.currentMovie).instruction = this.currentMovie:jumpLabel(label_name)
 end
 
+function YohaneFlash._internal._mt.isFrozen(this)
+	this = getmetatable(this)
+	assert(this.currentMovie, "No movie render is set")
+	
+	return this.movieFrozen
+end
+
 return YohaneFlash

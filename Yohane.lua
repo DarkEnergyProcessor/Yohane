@@ -87,8 +87,13 @@ function Yohane.Init(loaderfunc, sysroot)
 	
 	loaderfunc = loaderfunc or loadfile
 	
-	Yohane.Flash = assert(loaderfunc(sysroot.."/YohaneFlash.lua"))(Yohane)
-	Yohane.Movie = assert(loaderfunc(sysroot.."/YohaneMovie.lua"))(Yohane)
+	if sysroot then
+		Yohane.Flash = assert(loaderfunc(sysroot.."/YohaneFlash.lua"))(Yohane)
+		Yohane.Movie = assert(loaderfunc(sysroot.."/YohaneMovie.lua"))(Yohane)
+	else
+		Yohane.Flash = assert(loaderfunc("YohaneFlash.lua"))(Yohane)
+		Yohane.Movie = assert(loaderfunc("YohaneMovie.lua"))(Yohane)
+	end
 	isInitialized = true
 end
 
