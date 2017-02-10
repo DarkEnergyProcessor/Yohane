@@ -148,8 +148,8 @@ function YohaneFlash._internal.parseStream(stream)
 		elseif mtrxType == 3 then
 			-- MATRIX_TG, Translation, Skew, and Scale
 			matrixData = {Type = 3,
-				floats[mtrxIdx]    , floats[mtrxIdx + 1], floats[mtrxIdx + 2],
-				floats[mtrxIdx + 3], floats[mtrxIdx + 4], floats[mtrxIdx + 5]
+				floats[mtrxIdx]    , floats[mtrxIdx + 2], floats[mtrxIdx + 3],
+				floats[mtrxIdx + 1], floats[mtrxIdx + 4], floats[mtrxIdx + 5]
 			}
 		elseif mtrxType == 4 then
 			-- MATRIX_COL, RGBA color component, from 0.0 to 1.0

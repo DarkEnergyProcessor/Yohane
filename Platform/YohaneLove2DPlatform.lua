@@ -75,13 +75,18 @@ function Yohane.Platform.Draw(drawdatalist)
 	local r, g, b, a = love.graphics.getColor()
 	
 	for _, drawdata in ipairs(drawdatalist) do
-		--print(drawdata.x, drawdata.y)
+		local wh = drawdata.image:getWidth() * 0.5
+		local hh = drawdata.image:getHeight() * 0.5
 		love.graphics.setColor(drawdata.r, drawdata.g, drawdata.b, drawdata.a)
-		love.graphics.draw(
-			drawdata.image, drawdata.x, drawdata.y,
-			drawdata.rotation,
-			drawdata.scaleX, drawdata.scaleY
-		)
+		
+		-- Since rotation is first, use push/pop methods
+		love.graphics.push()
+		love.graphics.translate(drawdata.x + wh, drawdata.y + hh)
+		love.graphics.rotate(drawdata.rotation)
+		love.graphics.translate(-wh, -hh)
+		love.graphics.scale(drawdata.scaleX, drawdata.scaleY)
+		love.graphics.draw(drawdata.image)
+		love.graphics.pop()
 	end
 	
 	love.graphics.setColor(r, g, b, a)
