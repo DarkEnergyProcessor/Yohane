@@ -289,7 +289,6 @@ function YohaneFlash._internal._mt.update(this, deltaT)
 	if this.movieFrozen then return end
 	
 	this.timeModulate = this.timeModulate + deltaT
-	print(this.timeModulate)
 	
 	if this.timeModulate >= this.msPerFrame then
 		this.timeModulate = this.timeModulate - this.msPerFrame
