@@ -222,7 +222,6 @@ function YohaneFlash._internal._mt.clone(this)
 	local flsh = {
 		timeModulate = 0,
 		msPerFrame = this.msPerFrame,
-		currentMovie = this.currentMovie,
 		strings = Yohane.CopyTable(this.strings),
 		audios = {},
 		matrixTransf = {},
@@ -238,9 +237,14 @@ function YohaneFlash._internal._mt.clone(this)
 	
 	-- Copy movie data
 	for i = 0, #this.movieData do
+		
 		if this.movieData[i].type == "flash" then
 			flsh.movieData[i] = Yohane.CopyTable(this.movieData[i], "data")
 			flsh.movieData[i].data = Yohane.Movie.newMovie(flsh.movieData[i], flsh)
+			
+			if this.movieData[i].data == this.currentMovie then
+				flsh.currentMovie = flsh.movieData[i].data
+			end
 		elseif this.movieData[i].type == "image" then
 			flsh.movieData[i] = Yohane.CopyTable(this.movieData[i], "imageHandle")
 			flsh.movieData[i].imageHandle = Yohane.Platform.CloneImage(this.movieData[i].imageHandle)
@@ -285,6 +289,7 @@ function YohaneFlash._internal._mt.update(this, deltaT)
 	if this.movieFrozen then return end
 	
 	this.timeModulate = this.timeModulate + deltaT
+	print(this.timeModulate)
 	
 	if this.timeModulate >= this.msPerFrame then
 		this.timeModulate = this.timeModulate - this.msPerFrame
