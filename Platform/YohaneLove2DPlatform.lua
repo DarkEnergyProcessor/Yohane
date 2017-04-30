@@ -11,7 +11,7 @@ Yohane.Init(love.filesystem.load)						-- Initialize Yohane
 -- on directory where LOVE2D started, which breaks everything.
 ]]--
 
-local Yohane = require(({...})[1]:gsub("/", ".")..".Yohane")
+local Yohane = require(select(1, ...):gsub("/", ".")..".Yohane")
 local love = require("love")
 
 -- Simply set the function. ResolveImage always uses PNG
@@ -75,18 +75,23 @@ function Yohane.Platform.Draw(drawdatalist)
 	local r, g, b, a = love.graphics.getColor()
 	
 	for _, drawdata in ipairs(drawdatalist) do
-		local wh = drawdata.image:getWidth() * 0.5
-		local hh = drawdata.image:getHeight() * 0.5
-		love.graphics.setColor(drawdata.r, drawdata.g, drawdata.b, drawdata.a)
-		
-		-- Since rotation is first, use push/pop methods
-		love.graphics.push()
-		love.graphics.translate(drawdata.x + wh, drawdata.y + hh)
-		love.graphics.rotate(drawdata.rotation)
-		love.graphics.translate(-wh, -hh)
-		love.graphics.scale(drawdata.scaleX, drawdata.scaleY)
-		love.graphics.draw(drawdata.image)
-		love.graphics.pop()
+		if drawdata.image then
+			--[[
+			local wh = drawdata.image:getWidth() * 0.5
+			local hh = drawdata.image:getHeight() * 0.5
+			
+			-- Since rotation is first, use push/pop methods. TODO: Optimize
+			love.graphics.push()
+			love.graphics.translate(drawdata.x + wh, drawdata.y + hh)
+			love.graphics.rotate(drawdata.rotation)
+			love.graphics.translate(-wh, -hh)
+			love.graphics.scale(drawdata.scaleX, drawdata.scaleY)
+			love.graphics.draw(drawdata.image)
+			love.graphics.pop()
+			]]
+			love.graphics.setColor(drawdata.r, drawdata.g, drawdata.b, drawdata.a)
+			love.graphics.draw(drawdata.image, drawdata.x, drawdata.y, drawdata.rotation, drawdata.scaleX, drawdata.scaleY)
+		end
 	end
 	
 	love.graphics.setColor(r, g, b, a)
