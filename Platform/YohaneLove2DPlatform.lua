@@ -76,19 +76,6 @@ function Yohane.Platform.Draw(drawdatalist)
 	
 	for _, drawdata in ipairs(drawdatalist) do
 		if drawdata.image then
-			--[[
-			local wh = drawdata.image:getWidth() * 0.5
-			local hh = drawdata.image:getHeight() * 0.5
-			
-			-- Since rotation is first, use push/pop methods. TODO: Optimize
-			love.graphics.push()
-			love.graphics.translate(drawdata.x + wh, drawdata.y + hh)
-			love.graphics.rotate(drawdata.rotation)
-			love.graphics.translate(-wh, -hh)
-			love.graphics.scale(drawdata.scaleX, drawdata.scaleY)
-			love.graphics.draw(drawdata.image)
-			love.graphics.pop()
-			]]
 			love.graphics.setColor(drawdata.r, drawdata.g, drawdata.b, drawdata.a)
 			love.graphics.draw(drawdata.image, drawdata.x, drawdata.y, drawdata.rotation, drawdata.scaleX, drawdata.scaleY)
 		end
