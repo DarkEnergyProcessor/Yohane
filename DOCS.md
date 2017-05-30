@@ -169,7 +169,8 @@ Parameters:
 
 Returns: `PlatformImage` object
 
-Example: ```lua
+Example:
+```lua
 function Yohane.Platform.ResolveImage(path)
 	return love.graphics.newImage(path)
 end
@@ -248,7 +249,8 @@ Parameters:
 
 * `drawdatalist` - Lists of images to be drawn in their respective order
 
-Example: ```lua
+Example:
+```lua
 function Yohane.Platform.Draw(drawdatalist)
 	local r, g, b, a = love.graphics.getColor()
 	
