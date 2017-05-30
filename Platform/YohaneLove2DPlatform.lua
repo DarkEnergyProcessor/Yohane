@@ -3,9 +3,9 @@
 
 --[[
 -- To initialize Yohane under LOVE2D, example
-local Yohane = require("Yohane")						-- Load Yohane FLSH abstraction layer
-love.filesystem.load("YohaneLove2DPlatform", sysroot)	-- Set platform-specific functions
-Yohane.Init(love.filesystem.load)						-- Initialize Yohane
+local Yohane = require("Yohane")							-- Load Yohane FLSH abstraction layer
+love.filesystem.load("YohaneLove2DPlatform.lua")(sysroot)	-- Set platform-specific functions
+Yohane.Init(love.filesystem.load)							-- Initialize Yohane
 
 -- love.filesystem.load is used because loadfile operates
 -- on directory where LOVE2D started, which breaks everything.

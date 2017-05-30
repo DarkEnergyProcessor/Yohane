@@ -12,6 +12,15 @@ routines. In short, Yohane doesn't draw the images.
 
 With this model, Yohane can be ported to other game framework which uses Lua 5.1
 
-When will it complete?
-======================
-I don't know, but soon. Please don't ask this.
+Status
+======
+Currently it's in stable state as long as you do it right. The codebase is also very optimized
+so it's very fast and even faster when running under LuaJIT. It is used in [Live Simulator: 2](https://github.com/MikuAuahDark/livesim2) for example.
+
+Documentation
+=============
+Please see [`DOCS.md`](https://github.com/MikuAuahDark/Yohane/blob/master/DOCS.md)
+
+License
+=======
+[MIT License (free)](https://github.com/MikuAuahDark/Yohane/blob/master/LICENSE.md)
